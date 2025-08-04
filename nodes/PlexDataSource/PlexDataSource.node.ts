@@ -1,0 +1,499 @@
+import {
+	IExecuteFunctions,
+	INodeExecutionData,
+	INodeType,
+	INodeTypeDescription,
+	NodeApiError,
+	NodeOperationError,
+} from 'n8n-workflow';
+
+import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+
+export class PlexDataSource implements INodeType {
+	description: INodeTypeDescription = {
+		displayName: 'Plex ERP Data Source',
+		name: 'plexDataSource',
+		icon: 'file:plex.svg',
+		group: ['transform'],
+		version: 1,
+		subtitle: 'Execute Plex Data Source: {{$parameter["dataSourceId"]}}',
+		description: 'Execute Plex ERP Data Source queries via REST API',
+		defaults: {
+			name: 'Plex Data Source',
+		},
+		inputs: ['main'],
+		outputs: ['main'],
+		credentials: [
+			{
+				name: 'plexBasicAuthApi',
+				required: true,
+			},
+		],
+		properties: [
+			// Basic Configuration Section
+			{
+				displayName: 'Description',
+				name: 'description',
+				type: 'string',
+				typeOptions: {
+					rows: 4,
+				},
+				default: '',
+				placeholder: 'Describe what this data source call does...',
+				description: 'Free text area to describe the node\'s purpose and functionality',
+			},
+			{
+				displayName: 'Environment',
+				name: 'environment',
+				type: 'options',
+				options: [
+					{
+						name: 'Production',
+						value: 'production',
+					},
+					{
+						name: 'Test',
+						value: 'test',
+					},
+				],
+				default: 'production',
+				required: true,
+				description: 'Select between production and test environments',
+			},
+			{
+				displayName: 'Colo Name',
+				name: 'coloName',
+				type: 'string',
+				default: '',
+				placeholder: 'Enter colo name (leave blank for cloud)',
+				description: 'Enter the colo name for on-premise installations. Leave blank for cloud-based instances.',
+			},
+			{
+				displayName: 'Data Source ID',
+				name: 'dataSourceId',
+				type: 'string',
+				default: '',
+				required: true,
+				placeholder: '12345',
+				description: 'The unique identifier for the Plex data source to execute',
+			},
+			// URL Preview
+			{
+				displayName: 'Generated URL Preview',
+				name: 'urlPreview',
+				type: 'notice',
+				default: '',
+				description: 'The URL that will be called based on your current configuration',
+			},
+			// Body Configuration Section
+			{
+				displayName: 'Body Input Method',
+				name: 'bodyInputMethod',
+				type: 'options',
+				options: [
+					{
+						name: 'Key-Value Form',
+						value: 'form',
+					},
+					{
+						name: 'Raw JSON',
+						value: 'json',
+					},
+				],
+				default: 'form',
+				required: true,
+				description: 'How to configure the request body',
+			},
+			// Key-Value Form Parameters
+			{
+				displayName: 'Body Parameters',
+				name: 'bodyParameters',
+				type: 'fixedCollection',
+				typeOptions: {
+					multipleValues: true,
+					sortable: true,
+				},
+				default: {},
+				options: [
+					{
+						name: 'parameter',
+						displayName: 'Parameter',
+						values: [
+							{
+								displayName: 'Key',
+								name: 'key',
+								type: 'string',
+								default: '',
+								required: true,
+								description: 'Parameter name',
+							},
+							{
+								displayName: 'Value',
+								name: 'value',
+								type: 'string',
+								default: '',
+								description: 'Parameter value',
+							},
+							{
+								displayName: 'Data Type',
+								name: 'dataType',
+								type: 'options',
+								options: [
+									{
+										name: 'String',
+										value: 'string',
+									},
+									{
+										name: 'Number',
+										value: 'number',
+									},
+									{
+										name: 'Boolean',
+										value: 'boolean',
+									},
+									{
+										name: 'Date',
+										value: 'date',
+									},
+								],
+								default: 'string',
+								description: 'The data type for this parameter',
+							},
+							{
+								displayName: 'Skip if Null',
+								name: 'skipIfNull',
+								type: 'boolean',
+								default: false,
+								description: 'Skip this parameter if incoming data is null',
+							},
+							{
+								displayName: 'Data Format',
+								name: 'format',
+								type: 'string',
+								default: '',
+								placeholder: 'e.g., YYYY-MM-DD for dates',
+								description: 'Format specification for data conversion',
+								displayOptions: {
+									show: {
+										dataType: ['date'],
+									},
+								},
+							},
+						],
+					},
+				],
+				displayOptions: {
+					show: {
+						bodyInputMethod: ['form'],
+					},
+				},
+				description: 'Configure key-value pairs for the request body',
+			},
+			// Raw JSON Input
+			{
+				displayName: 'JSON Body',
+				name: 'jsonBody',
+				type: 'json',
+				default: '{}',
+				description: 'Raw JSON body for the request',
+				displayOptions: {
+					show: {
+						bodyInputMethod: ['json'],
+					},
+				},
+			},
+			// Advanced Settings Section
+			{
+				displayName: 'Advanced Settings',
+				name: 'advancedSettings',
+				type: 'collection',
+				placeholder: 'Add Setting',
+				default: {},
+				options: [
+					{
+						displayName: 'Retry on Failure',
+						name: 'retryOnFailure',
+						type: 'boolean',
+						default: false,
+						description: 'Enable automatic retry on failed requests',
+					},
+					{
+						displayName: 'Max Retry Attempts',
+						name: 'maxRetryAttempts',
+						type: 'number',
+						default: 3,
+						typeOptions: {
+							minValue: 1,
+							maxValue: 10,
+						},
+						displayOptions: {
+							show: {
+								retryOnFailure: [true],
+							},
+						},
+						description: 'Maximum number of retry attempts',
+					},
+					{
+						displayName: 'Retry Wait Time (ms)',
+						name: 'retryWaitTime',
+						type: 'number',
+						default: 1000,
+						typeOptions: {
+							minValue: 100,
+							maxValue: 30000,
+						},
+						displayOptions: {
+							show: {
+								retryOnFailure: [true],
+							},
+						},
+						description: 'Time to wait between retry attempts in milliseconds',
+					},
+					{
+						displayName: 'Request Timeout (ms)',
+						name: 'timeout',
+						type: 'number',
+						default: 30000,
+						typeOptions: {
+							minValue: 1000,
+							maxValue: 300000,
+						},
+						description: 'Request timeout in milliseconds',
+					},
+					{
+						displayName: 'Follow Redirects',
+						name: 'followRedirects',
+						type: 'boolean',
+						default: true,
+						description: 'Automatically follow HTTP redirects',
+					},
+				],
+			},
+		],
+	};
+
+	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
+		const items = this.getInputData();
+		const returnData: INodeExecutionData[] = [];
+
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+			try {
+				// Get parameters
+				const environment = this.getNodeParameter('environment', itemIndex) as string;
+				const coloName = this.getNodeParameter('coloName', itemIndex) as string;
+				const dataSourceId = this.getNodeParameter('dataSourceId', itemIndex) as string;
+				const bodyInputMethod = this.getNodeParameter('bodyInputMethod', itemIndex) as string;
+				const advancedSettings = this.getNodeParameter('advancedSettings', itemIndex, {}) as any;
+
+				// Get credentials
+				const credentials = await this.getCredentials('plexBasicAuthApi');
+
+				// Generate URL
+				const url = generateUrl(environment, coloName, dataSourceId);
+
+				// Prepare request body
+				const requestBody = await prepareRequestBody(this, bodyInputMethod, itemIndex);
+
+				// Configure request options
+				const requestConfig: AxiosRequestConfig = {
+					method: 'POST',
+					url,
+					data: requestBody,
+					headers: {
+						'Content-Type': 'application/json',
+						'Accept': 'application/json',
+					},
+					auth: {
+						username: credentials.username as string,
+						password: credentials.password as string,
+					},
+					timeout: advancedSettings.timeout || 30000,
+					maxRedirects: advancedSettings.followRedirects !== false ? 5 : 0,
+				};
+
+				// Execute request with retry logic
+				const response = await executeRequest(requestConfig, advancedSettings);
+
+				// Process response
+				const responseData = processResponse(response, url);
+				returnData.push(responseData);
+
+			} catch (error: any) {
+				if (this.continueOnFail()) {
+					returnData.push({ error: error.message, json: {}, pairedItem: itemIndex });
+				} else {
+					throw new NodeApiError(this.getNode(), error);
+				}
+			}
+		}
+
+		return [returnData];
+	}
+}
+
+/**
+ * Generate the API URL based on environment and colo settings
+ */
+function generateUrl(environment: string, coloName: string, dataSourceId: string): string {
+	let baseUrl: string;
+
+	if (coloName && coloName.trim() !== '') {
+		// On-premise deployment
+		if (environment === 'test') {
+			baseUrl = `https://${coloName}.test.on.plex.com`;
+		} else {
+			baseUrl = `https://${coloName}.on.plex.com`;
+		}
+	} else {
+		// Cloud deployment
+		if (environment === 'test') {
+			baseUrl = 'https://test.cloud.plex.com';
+		} else {
+			baseUrl = 'https://cloud.plex.com';
+		}
+	}
+
+	return `${baseUrl}/api/datasources/${dataSourceId}/execute?format=2`;
+}
+
+/**
+ * Prepare the request body based on input method
+ */
+async function prepareRequestBody(context: IExecuteFunctions, bodyInputMethod: string, itemIndex: number): Promise<any> {
+	if (bodyInputMethod === 'json') {
+		const jsonBody = context.getNodeParameter('jsonBody', itemIndex) as string;
+		try {
+			return JSON.parse(jsonBody);
+		} catch (error: any) {
+			throw new NodeOperationError(context.getNode(), `Invalid JSON in body: ${error.message}`);
+		}
+	} else {
+		// Form-based key-value pairs
+		const bodyParameters = context.getNodeParameter('bodyParameters.parameter', itemIndex, []) as any[];
+		const body: any = {};
+
+		for (const param of bodyParameters) {
+			let value = param.value;
+
+			// Skip if null and skipIfNull is enabled
+			if (param.skipIfNull && (value === null || value === undefined || value === '')) {
+				continue;
+			}
+
+			// Apply data type conversion
+			value = convertDataType(context, value, param.dataType, param.format);
+
+			body[param.key] = value;
+		}
+
+		return body;
+	}
+}
+
+/**
+ * Convert value to specified data type
+ */
+function convertDataType(context: IExecuteFunctions, value: any, dataType: string, format?: string): any {
+	if (value === null || value === undefined) {
+		return value;
+	}
+
+	switch (dataType) {
+		case 'number': {
+			const num = Number(value);
+			if (isNaN(num)) {
+				throw new NodeOperationError(context.getNode(), `Cannot convert "${value}" to number`);
+			}
+			return num;
+		}
+
+		case 'boolean': {
+			if (typeof value === 'boolean') {
+				return value;
+			}
+			const str = String(value).toLowerCase();
+			return str === 'true' || str === '1' || str === 'yes';
+		}
+
+		case 'date':
+			if (format) {
+				// Use custom format if provided
+				return formatDate(context, value, format);
+			}
+			return new Date(value).toISOString();
+
+		case 'string':
+		default:
+			return String(value);
+	}
+}
+
+/**
+ * Format date according to specified format
+ */
+function formatDate(context: IExecuteFunctions, value: any, format: string): string {
+	const date = new Date(value);
+	if (isNaN(date.getTime())) {
+		throw new NodeOperationError(context.getNode(), `Invalid date value: ${value}`);
+	}
+
+	// Simple format replacement - could be enhanced with a proper date formatting library
+	return format
+		.replace('YYYY', date.getFullYear().toString())
+		.replace('MM', (date.getMonth() + 1).toString().padStart(2, '0'))
+		.replace('DD', date.getDate().toString().padStart(2, '0'))
+		.replace('HH', date.getHours().toString().padStart(2, '0'))
+		.replace('mm', date.getMinutes().toString().padStart(2, '0'))
+		.replace('ss', date.getSeconds().toString().padStart(2, '0'));
+}
+
+/**
+ * Execute HTTP request with retry logic
+ */
+async function executeRequest(config: AxiosRequestConfig, advancedSettings: any): Promise<AxiosResponse> {
+	const maxAttempts = advancedSettings.retryOnFailure ? (advancedSettings.maxRetryAttempts || 3) : 1;
+	const waitTime = advancedSettings.retryWaitTime || 1000;
+
+	let lastError: any;
+
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		try {
+			const startTime = Date.now();
+			const response = await axios(config);
+			const endTime = Date.now();
+
+			// Add execution time to response
+			(response as any).executionTime = endTime - startTime;
+
+			return response;
+		} catch (error) {
+			lastError = error;
+
+			// Don't retry on final attempt
+			if (attempt === maxAttempts) {
+				break;
+			}
+
+			// Wait before retry with exponential backoff
+			const delay = waitTime * Math.pow(2, attempt - 1);
+			await new Promise(resolve => setTimeout(resolve, delay));
+		}
+	}
+
+	throw lastError;
+}
+
+/**
+ * Process the HTTP response
+ */
+function processResponse(response: AxiosResponse, requestUrl: string): INodeExecutionData {
+	return {
+		json: {
+			statusCode: response.status,
+			headers: response.headers,
+			body: response.data,
+			requestUrl,
+			executionTime: (response as any).executionTime || 0,
+		},
+	};
+}
