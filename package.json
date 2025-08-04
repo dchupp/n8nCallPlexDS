@@ -10,14 +10,14 @@
     "datasource"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/dchupp/n8n-nodes-plex-datasource",
+  "homepage": "https://github.com/dchupp/n8nCallPlexDS",
   "author": {
     "name": "David Chupp",
     "email": "me@davidchupp.com"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-username/n8n-nodes-plex-datasource.git"
+    "url": "git+https://github.com/dchupp/n8nCallPlexDS.git"
   },
   "engines": {
     "node": ">=18.10",
@@ -31,8 +31,8 @@
     "dev": "tsc --watch",
     "format": "prettier nodes credentials --write",
     "lint": "eslint nodes credentials",
-    "lintfix": "eslint nodes credentials package.json --fix",
-    "prepublishOnly": "npm run build && npm run lint -c .eslintrc.prepublish.js nodes credentials package.json",
+    "lint:fix": "eslint nodes credentials --fix",
+    "prepublishOnly": "npm run build && npm run lint",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"

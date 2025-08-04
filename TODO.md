@@ -229,7 +229,6 @@ The node is now **production-ready** and can be published to npm or used in n8n 
 
 ### Performance Optimization
 - [x] Optimize HTTP request handling
-- [ ] Implement connection pooling if needed
 - [x] Add request/response size limits
 - [x] Memory usage optimization
 
