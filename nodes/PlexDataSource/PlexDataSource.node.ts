@@ -394,7 +394,13 @@ export class PlexDataSource implements INodeType {
 						pairedItem: itemIndex 
 					});
 				} else {
-					throw new NodeApiError(this.getNode(), { message: fullErrorMessage, httpCode: error.response?.status });
+					// Create a proper error object for NodeApiError
+					const errorObject = {
+						message: fullErrorMessage,
+						status: error.response?.status,
+						...(error.response?.data && { data: error.response.data })
+					};
+					throw new NodeApiError(this.getNode(), errorObject);
 				}
 			}
 		}
