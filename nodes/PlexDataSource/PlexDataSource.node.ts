@@ -339,8 +339,7 @@ export class PlexDataSource implements INodeType {
 				// Prepare request body
 				const requestBody = await prepareRequestBody(this, bodyInputMethod, itemIndex);
 
-				// Build request config (keep current logic, but add maxBodyLength)
-				const basicAuth = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
+// Build request config using Axios's built-in auth option for Basic Auth
 				const requestConfig: AxiosRequestConfig = {
 					method: 'POST',
 					url,
@@ -348,7 +347,10 @@ export class PlexDataSource implements INodeType {
 					headers: {
 						'Content-Type': 'application/json',
 						'Accept': 'application/json',
-						'Authorization': `Basic ${basicAuth}`,
+					},
+					auth: {
+						username: String(credentials.username),
+						password: String(credentials.password),
 					},
 					timeout: advancedSettings.timeout || 30000,
 					maxRedirects: advancedSettings.followRedirects !== false ? 5 : 0,
@@ -361,7 +363,9 @@ export class PlexDataSource implements INodeType {
 					headers: {
 						...requestConfig.headers,
 						Authorization: '[REDACTED]'
-					}
+					},
+					// Remove auth property from log for security
+					auth: undefined
 				};
 
 				let response: AxiosResponse | undefined;
