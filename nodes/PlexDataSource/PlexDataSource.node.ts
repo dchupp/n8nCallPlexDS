@@ -516,46 +516,46 @@ export class PlexDataSource implements INodeType {
 
 				const fullErrorMessage = errorDetails ? `${errorMessage}. ${errorDetails}` : errorMessage;
 
-			   // Always attach __plexFullLog to error output for n8n visibility
-			   const errorLog = {
-				   error: true,
-				   errorMessage: errorMessage,
-				   details: errorDetails,
-				   url,
-				   dataSourceId,
-				   statusCode: error.response?.status,
-				   originalError: error.message,
-				   __plexFullLog: {
-					   error: true,
-					   errorMessage: error.message,
-					   errorStack: error.stack,
-					   errorCode: error.code,
-					   errorResponse: error.response ? {
-						   status: error.response.status,
-						   statusText: error.response.statusText,
-						   headers: error.response.headers,
-						   data: error.response.data
-					   } : undefined,
-					   requestConfig: undefined // Not available in this catch, but could be passed in future
-				   }
-			   };
-			   if (this.continueOnFail()) {
-				   returnData.push({
-					   json: errorLog,
-					   pairedItem: itemIndex
-				   });
-			   } else {
-				   // Attach __plexFullLog to error object for n8n error display
-				   (error as any).__plexFullLog = errorLog.__plexFullLog;
-				   const nodeError = new NodeApiError(this.getNode(), error, {
-					   message: fullErrorMessage,
-					   description: errorDetails,
-					   httpCode: error.response?.status?.toString(),
-				   });
-				   // Attach __plexFullLog to the thrown error for n8n UI
-				   (nodeError as any).__plexFullLog = errorLog.__plexFullLog;
-				   throw nodeError;
-			   }
+// Always attach __plexFullLog to error output for n8n visibility
+				const errorLog = {
+					error: true,
+					errorMessage,
+					details: errorDetails,
+					url,
+					dataSourceId,
+					statusCode: error.response?.status,
+					originalError: error.message,
+					__plexFullLog: {
+						error: true,
+						errorMessage: error.message,
+						errorStack: error.stack,
+						errorCode: error.code,
+						errorResponse: error.response ? {
+							status: error.response.status,
+							statusText: error.response.statusText,
+							headers: error.response.headers,
+							data: error.response.data
+						} : undefined,
+						requestConfig: undefined // Not available in this catch, but could be passed in future
+					}
+				};
+				if (this.continueOnFail()) {
+					returnData.push({
+						json: errorLog,
+						pairedItem: itemIndex
+					});
+				} else {
+					// Attach __plexFullLog to error object for n8n error display
+					(error as any).__plexFullLog = errorLog.__plexFullLog;
+					const nodeError = new NodeApiError(this.getNode(), error, {
+						message: fullErrorMessage,
+						description: errorDetails,
+						httpCode: error.response?.status?.toString(),
+					});
+					// Attach __plexFullLog to the thrown error for n8n UI
+					(nodeError as any).__plexFullLog = errorLog.__plexFullLog;
+					throw nodeError;
+				}
 			}
 		}
 
