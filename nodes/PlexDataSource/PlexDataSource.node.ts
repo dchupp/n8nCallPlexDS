@@ -77,16 +77,16 @@ export class PlexDataSource implements INodeType {
 				placeholder: '12345',
 				description: 'The unique identifier for the Plex data source to execute',
 			},
-			// URL Preview
+			// URL Information
 			{
-				displayName: 'URL Preview',
-				name: 'urlPreview',
+				displayName: 'URL Format Information',
+				name: 'urlInfo',
 				type: 'notice',
 				default: '',
 				typeOptions: {
 					theme: 'info',
 				},
-				description: 'Preview: Based on environment and colo name, the URL will be generated dynamically. Example formats:\n• Production with colo: https://[coloName].on.plex.com/api/datasources/[dataSourceId]/execute?format=2\n• Production cloud: https://cloud.plex.com/api/datasources/[dataSourceId]/execute?format=2\n• Test with colo: https://[coloName].test.on.plex.com/api/datasources/[dataSourceId]/execute?format=2\n• Test cloud: https://test.cloud.plex.com/api/datasources/[dataSourceId]/execute?format=2',
+				description: 'URLs are generated based on your settings:\n\n• Production + Colo Name: https://[coloName].on.plex.com/api/datasources/[dataSourceId]/execute?format=2\n• Production + No Colo: https://cloud.plex.com/api/datasources/[dataSourceId]/execute?format=2\n• Test + Colo Name: https://[coloName].test.on.plex.com/api/datasources/[dataSourceId]/execute?format=2\n• Test + No Colo: https://test.cloud.plex.com/api/datasources/[dataSourceId]/execute?format=2',
 			},
 			// Body Configuration Section
 			{
@@ -288,8 +288,26 @@ export class PlexDataSource implements INodeType {
 				const bodyInputMethod = this.getNodeParameter('bodyInputMethod', itemIndex) as string;
 				const advancedSettings = this.getNodeParameter('advancedSettings', itemIndex, {}) as any;
 
+				// Validate required parameters
+				if (!environment) {
+					throw new NodeOperationError(this.getNode(), 'Environment is required');
+				}
+				if (!dataSourceId || dataSourceId.trim() === '') {
+					throw new NodeOperationError(this.getNode(), 'Data Source ID is required');
+				}
+				if (!bodyInputMethod) {
+					throw new NodeOperationError(this.getNode(), 'Body Input Method is required');
+				}
+
 				// Get credentials
 				const credentials = await this.getCredentials('plexBasicAuthApi');
+
+				if (!credentials) {
+					throw new NodeOperationError(this.getNode(), 'No credentials configured. Please add Plex Basic Auth credentials.');
+				}
+				if (!credentials.username || !credentials.password) {
+					throw new NodeOperationError(this.getNode(), 'Invalid credentials. Username and password are required.');
+				}
 
 				// Generate URL
 				const url = generateUrl(environment, coloName, dataSourceId);
@@ -322,6 +340,15 @@ export class PlexDataSource implements INodeType {
 				returnData.push(responseData);
 
 			} catch (error: any) {
+				console.error('PlexDataSource Error Details:', {
+					message: error.message,
+					status: error.response?.status,
+					statusText: error.response?.statusText,
+					data: error.response?.data,
+					code: error.code,
+					stack: error.stack
+				});
+
 				let errorMessage = error.message || 'Unknown error occurred';
 				let errorDetails = '';
 
@@ -333,7 +360,8 @@ export class PlexDataSource implements INodeType {
 					const environment = this.getNodeParameter('environment', itemIndex) as string;
 					const coloName = this.getNodeParameter('coloName', itemIndex) as string;
 					url = generateUrl(environment, coloName, dataSourceId);
-				} catch {
+				} catch (paramError) {
+					console.error('Error getting parameters for error reporting:', paramError);
 					// Ignore parameter access errors during error handling
 				}
 
