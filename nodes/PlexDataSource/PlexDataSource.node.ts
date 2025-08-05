@@ -79,11 +79,14 @@ export class PlexDataSource implements INodeType {
 			},
 			// URL Preview
 			{
-				displayName: 'Generated URL Preview',
+				displayName: 'URL Preview',
 				name: 'urlPreview',
 				type: 'notice',
 				default: '',
-				description: 'The URL that will be called based on your current configuration',
+				typeOptions: {
+					theme: 'info',
+				},
+				description: 'Preview: Based on environment and colo name, the URL will be generated dynamically. Example formats:\n• Production with colo: https://[coloName].on.plex.com/api/datasources/[dataSourceId]/execute?format=2\n• Production cloud: https://cloud.plex.com/api/datasources/[dataSourceId]/execute?format=2\n• Test with colo: https://[coloName].test.on.plex.com/api/datasources/[dataSourceId]/execute?format=2\n• Test cloud: https://test.cloud.plex.com/api/datasources/[dataSourceId]/execute?format=2',
 			},
 			// Body Configuration Section
 			{
@@ -319,10 +322,79 @@ export class PlexDataSource implements INodeType {
 				returnData.push(responseData);
 
 			} catch (error: any) {
+				let errorMessage = error.message || 'Unknown error occurred';
+				let errorDetails = '';
+
+				// Get the current parameters for better error reporting
+				let dataSourceId = '';
+				let url = '';
+				try {
+					dataSourceId = this.getNodeParameter('dataSourceId', itemIndex) as string;
+					const environment = this.getNodeParameter('environment', itemIndex) as string;
+					const coloName = this.getNodeParameter('coloName', itemIndex) as string;
+					url = generateUrl(environment, coloName, dataSourceId);
+				} catch {
+					// Ignore parameter access errors during error handling
+				}
+
+				// Provide more specific error messages based on error type
+				if (error.response) {
+					// HTTP error response from server
+					const status = error.response.status;
+					const statusText = error.response.statusText;
+					const responseData = error.response.data;
+					
+					switch (status) {
+						case 400:
+							errorMessage = 'Bad Request: The request parameters are invalid';
+							errorDetails = `Check your Data Source ID (${dataSourceId}) and request body parameters`;
+							break;
+						case 401:
+							errorMessage = 'Authentication Failed: Invalid credentials';
+							errorDetails = 'Please verify your username and password in the credential settings';
+							break;
+						case 403:
+							errorMessage = 'Access Forbidden: Insufficient permissions';
+							errorDetails = 'Your account may not have access to this data source';
+							break;
+						case 404:
+							errorMessage = 'Not Found: Data source or endpoint does not exist';
+							errorDetails = `Data Source ID "${dataSourceId}" may not exist or the URL "${url}" is incorrect`;
+							break;
+						case 500:
+							errorMessage = 'Server Error: Plex API internal error';
+							errorDetails = 'The Plex server encountered an internal error. Try again later.';
+							break;
+						default:
+							errorMessage = `HTTP ${status}: ${statusText}`;
+							errorDetails = responseData ? JSON.stringify(responseData) : 'No additional details available';
+					}
+				} else if (error.code === 'ECONNREFUSED') {
+					errorMessage = 'Connection Refused: Unable to connect to Plex server';
+					errorDetails = url ? `Check if the URL "${url}" is correct and the server is accessible` : 'Check your URL configuration';
+				} else if (error.code === 'ENOTFOUND') {
+					errorMessage = 'DNS Error: Hostname not found';
+					errorDetails = url ? `Check if the hostname in "${url}" is correct` : 'Check your hostname configuration';
+				} else if (error.code === 'ETIMEDOUT') {
+					errorMessage = 'Timeout: Request took too long to complete';
+					errorDetails = 'Consider increasing the timeout setting or check server availability';
+				}
+
+				const fullErrorMessage = errorDetails ? `${errorMessage}. ${errorDetails}` : errorMessage;
+
 				if (this.continueOnFail()) {
-					returnData.push({ error: error.message, json: {}, pairedItem: itemIndex });
+					returnData.push({ 
+						error: fullErrorMessage, 
+						json: { 
+							error: errorMessage,
+							details: errorDetails,
+							url,
+							dataSourceId
+						}, 
+						pairedItem: itemIndex 
+					});
 				} else {
-					throw new NodeApiError(this.getNode(), error);
+					throw new NodeApiError(this.getNode(), { message: fullErrorMessage, httpCode: error.response?.status });
 				}
 			}
 		}
