@@ -339,8 +339,6 @@ export class PlexDataSource implements INodeType {
 				// Prepare request body
 				const requestBody = await prepareRequestBody(this, bodyInputMethod, itemIndex);
 
-
-
 				// Build request config (keep current logic, but add maxBodyLength)
 				const basicAuth = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
 				const requestConfig: AxiosRequestConfig = {
@@ -371,38 +369,48 @@ export class PlexDataSource implements INodeType {
 				try {
 					response = await executeRequest(requestConfig, advancedSettings);
 					responseData = processResponse(response, url);
+					// Always attach request/response log
+					responseData.json.__plexFullLog = {
+						requestConfig: redactedRequestConfig,
+						response: response ? {
+							status: response.status,
+							statusText: response.statusText,
+							headers: response.headers,
+							data: response.data
+						} : undefined
+					};
+					returnData.push(responseData);
 				} catch (err) {
 					// Type guard for error object
 					const e: any = err;
-					responseData = {
-						json: {
-							error: true,
-							errorMessage: e.message,
-							errorStack: e.stack,
-							errorCode: e.code,
-							errorResponse: e.response ? {
-								status: e.response.status,
-								statusText: e.response.statusText,
-								headers: e.response.headers,
-								data: e.response.data
-							} : undefined,
-							requestConfig: redactedRequestConfig
-						}
+					const errorLog = {
+						error: true,
+						errorMessage: e.message,
+						errorStack: e.stack,
+						errorCode: e.code,
+						errorResponse: e.response ? {
+							status: e.response.status,
+							statusText: e.response.statusText,
+							headers: e.response.headers,
+							data: e.response.data
+						} : undefined,
+						requestConfig: redactedRequestConfig
 					};
-					// Also rethrow for n8n error handling
-					throw err;
+					if (this.continueOnFail()) {
+						returnData.push({
+							json: {
+								...errorLog,
+								__plexFullLog: errorLog
+							},
+							pairedItem: itemIndex
+						});
+					} else {
+						// Attach log to error object for n8n error display
+						(e as any).__plexFullLog = errorLog;
+						throw err;
+					}
 				}
-				// Always attach request/response log
-				responseData.json.__plexFullLog = {
-					requestConfig: redactedRequestConfig,
-					response: response ? {
-						status: response.status,
-						statusText: response.statusText,
-						headers: response.headers,
-						data: response.data
-					} : undefined
-				};
-				returnData.push(responseData);
+				// Skip the old returnData.push(responseData); now handled above
 
 			} catch (error: any) {
 				console.error('PlexDataSource Error Details:', {
