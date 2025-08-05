@@ -340,20 +340,19 @@ export class PlexDataSource implements INodeType {
 				const requestBody = await prepareRequestBody(this, bodyInputMethod, itemIndex);
 
 				// Configure request options
-				const requestConfig: AxiosRequestConfig = {
-					method: 'POST',
-					url,
-					data: requestBody,
-					headers: {
-						'Content-Type': 'application/json',
-						'Accept': 'application/json',
-					},
-					auth: {
-						username: credentials.username as string,
-						password: credentials.password as string,
-					},
-					timeout: advancedSettings.timeout || 30000,
-					maxRedirects: advancedSettings.followRedirects !== false ? 5 : 0,
+// Construct Basic Auth header manually
+const basicAuth = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
+const requestConfig: AxiosRequestConfig = {
+	method: 'POST',
+	url,
+	data: requestBody,
+	headers: {
+		'Content-Type': 'application/json',
+		'Accept': 'application/json',
+		'Authorization': `Basic ${basicAuth}`,
+	},
+	timeout: advancedSettings.timeout || 30000,
+	maxRedirects: advancedSettings.followRedirects !== false ? 5 : 0,
 				};
 
 				// Execute request with retry logic
