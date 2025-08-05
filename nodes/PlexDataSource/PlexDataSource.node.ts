@@ -396,30 +396,57 @@ export class PlexDataSource implements INodeType {
 					const statusText = error.response.statusText;
 					const responseData = error.response.data;
 					
+					// Check if the response contains a specific error message
+					if (responseData) {
+						if (typeof responseData === 'string') {
+							errorDetails = responseData;
+						} else if (responseData.message) {
+							errorDetails = responseData.message;
+						} else if (responseData.error) {
+							errorDetails = responseData.error;
+						} else if (responseData.errors && Array.isArray(responseData.errors)) {
+							errorDetails = responseData.errors.join(', ');
+						} else {
+							errorDetails = JSON.stringify(responseData);
+						}
+					}
+					
 					switch (status) {
 						case 400:
 							errorMessage = 'Bad Request: The request parameters are invalid';
-							errorDetails = `Check your Data Source ID (${dataSourceId}) and request body parameters`;
+							if (!errorDetails) {
+								errorDetails = `Check your Data Source ID (${dataSourceId}) and request body parameters`;
+							}
 							break;
 						case 401:
 							errorMessage = 'Authentication Failed: Invalid credentials';
-							errorDetails = 'Please verify your username and password in the credential settings';
+							if (!errorDetails) {
+								errorDetails = 'Please verify your username and password in the credential settings';
+							}
 							break;
 						case 403:
 							errorMessage = 'Access Forbidden: Insufficient permissions';
-							errorDetails = 'Your account may not have access to this data source';
+							if (!errorDetails) {
+								errorDetails = 'Your account may not have access to this data source';
+							}
 							break;
 						case 404:
 							errorMessage = 'Not Found: Data source or endpoint does not exist';
-							errorDetails = `Data Source ID "${dataSourceId}" may not exist or the URL "${url}" is incorrect`;
+							if (!errorDetails) {
+								errorDetails = `Data Source ID "${dataSourceId}" may not exist or the URL "${url}" is incorrect`;
+							}
 							break;
 						case 500:
 							errorMessage = 'Server Error: Plex API internal error';
-							errorDetails = 'The Plex server encountered an internal error. Try again later.';
+							if (!errorDetails) {
+								errorDetails = 'The Plex server encountered an internal error. Try again later.';
+							}
 							break;
 						default:
 							errorMessage = `HTTP ${status}: ${statusText}`;
-							errorDetails = responseData ? JSON.stringify(responseData) : 'No additional details available';
+							if (!errorDetails) {
+								errorDetails = 'No additional details available';
+							}
 					}
 				} else if (error.code === 'ECONNREFUSED') {
 					errorMessage = 'Connection Refused: Unable to connect to Plex server';
@@ -436,19 +463,24 @@ export class PlexDataSource implements INodeType {
 
 				if (this.continueOnFail()) {
 					returnData.push({ 
-						error: fullErrorMessage, 
 						json: { 
 							error: errorMessage,
 							details: errorDetails,
 							url,
-							dataSourceId
+							dataSourceId,
+							statusCode: error.response?.status,
+							originalError: error.message
 						}, 
 						pairedItem: itemIndex 
 					});
 				} else {
-					// Create a proper error with the enhanced message
-					error.message = fullErrorMessage;
-					throw new NodeApiError(this.getNode(), error);
+					// Create a more detailed error object
+					const nodeError = new NodeApiError(this.getNode(), error, {
+						message: fullErrorMessage,
+						description: errorDetails,
+						httpCode: error.response?.status?.toString(),
+					});
+					throw nodeError;
 				}
 			}
 		}
