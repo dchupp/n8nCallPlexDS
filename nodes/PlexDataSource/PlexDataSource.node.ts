@@ -1,6 +1,8 @@
 import {
 	IExecuteFunctions,
+	ILoadOptionsFunctions,
 	INodeExecutionData,
+	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
 	NodeApiError,
@@ -77,16 +79,17 @@ export class PlexDataSource implements INodeType {
 				placeholder: '12345',
 				description: 'The unique identifier for the Plex data source to execute',
 			},
-			// URL Information
+			// URL Preview
 			{
-				displayName: 'URL Format Information',
-				name: 'urlInfo',
-				type: 'notice',
+				displayName: 'Generated URL Preview',
+				name: 'urlPreview',
+				type: 'options',
 				default: '',
+				required: false,
 				typeOptions: {
-					theme: 'info',
+					loadOptionsMethod: 'getUrlPreview',
 				},
-				description: 'URLs are generated based on your settings:\n\n• Production + Colo Name: https://[coloName].on.plex.com/api/datasources/[dataSourceId]/execute?format=2\n• Production + No Colo: https://cloud.plex.com/api/datasources/[dataSourceId]/execute?format=2\n• Test + Colo Name: https://[coloName].test.on.plex.com/api/datasources/[dataSourceId]/execute?format=2\n• Test + No Colo: https://test.cloud.plex.com/api/datasources/[dataSourceId]/execute?format=2',
+				description: 'This shows the URL that will be called based on your current settings',
 			},
 			// Body Configuration Section
 			{
@@ -275,6 +278,27 @@ export class PlexDataSource implements INodeType {
 		],
 	};
 
+	methods = {
+		loadOptions: {
+			async getUrlPreview(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				try {
+					const environment = this.getCurrentNodeParameter('environment') as string;
+					const coloName = this.getCurrentNodeParameter('coloName') as string;
+					const dataSourceId = this.getCurrentNodeParameter('dataSourceId') as string;
+					
+					if (!dataSourceId) {
+						return [{ name: 'Enter Data Source ID to see URL preview', value: '' }];
+					}
+					
+					const url = generateUrl(environment || 'production', coloName || '', dataSourceId);
+					return [{ name: url, value: url }];
+				} catch (error) {
+					return [{ name: 'Error generating URL preview', value: '' }];
+				}
+			},
+		},
+	};
+
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
@@ -422,13 +446,9 @@ export class PlexDataSource implements INodeType {
 						pairedItem: itemIndex 
 					});
 				} else {
-					// Create a proper error object for NodeApiError
-					const errorObject = {
-						message: fullErrorMessage,
-						status: error.response?.status,
-						...(error.response?.data && { data: error.response.data })
-					};
-					throw new NodeApiError(this.getNode(), errorObject);
+					// Create a proper error with the enhanced message
+					error.message = fullErrorMessage;
+					throw new NodeApiError(this.getNode(), error);
 				}
 			}
 		}
