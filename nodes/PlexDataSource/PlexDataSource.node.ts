@@ -436,6 +436,12 @@ export class PlexDataSource implements INodeType {
 								errorDetails = `Data Source ID "${dataSourceId}" may not exist or the URL "${url}" is incorrect`;
 							}
 							break;
+						case 419:
+							errorMessage = 'Authentication Timeout: Session expired or timed out';
+							if (!errorDetails) {
+								errorDetails = 'Your session has expired or timed out. Please re-authenticate or check your credentials/server session settings.';
+							}
+							break;
 						case 500:
 							errorMessage = 'Server Error: Plex API internal error';
 							if (!errorDetails) {
