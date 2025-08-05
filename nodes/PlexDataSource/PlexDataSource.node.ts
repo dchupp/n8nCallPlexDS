@@ -357,26 +357,51 @@ export class PlexDataSource implements INodeType {
 					maxBodyLength: Infinity,
 				};
 
-				// Add visible logging for n8n output
-				const logInfo = {
-					request: {
-						url,
-						username: credentials.username,
-						headers: {
-							'Content-Type': 'application/json',
-							'Accept': 'application/json',
-							'Authorization': '[REDACTED]'
-						},
-						body: requestBody
+				// Deep logging for n8n output: full request/response
+				const redactedRequestConfig = {
+					...requestConfig,
+					headers: {
+						...requestConfig.headers,
+						Authorization: '[REDACTED]'
 					}
 				};
 
-				// Execute request with retry logic
-				const response = await executeRequest(requestConfig, advancedSettings);
-
-				// Process response and include log info
-				const responseData = processResponse(response, url);
-				responseData.json.__plexRequestLog = logInfo;
+				let response: AxiosResponse | undefined;
+				let responseData: INodeExecutionData;
+				try {
+					response = await executeRequest(requestConfig, advancedSettings);
+					responseData = processResponse(response, url);
+				} catch (err) {
+					// Type guard for error object
+					const e: any = err;
+					responseData = {
+						json: {
+							error: true,
+							errorMessage: e.message,
+							errorStack: e.stack,
+							errorCode: e.code,
+							errorResponse: e.response ? {
+								status: e.response.status,
+								statusText: e.response.statusText,
+								headers: e.response.headers,
+								data: e.response.data
+							} : undefined,
+							requestConfig: redactedRequestConfig
+						}
+					};
+					// Also rethrow for n8n error handling
+					throw err;
+				}
+				// Always attach request/response log
+				responseData.json.__plexFullLog = {
+					requestConfig: redactedRequestConfig,
+					response: response ? {
+						status: response.status,
+						statusText: response.statusText,
+						headers: response.headers,
+						data: response.data
+					} : undefined
+				};
 				returnData.push(responseData);
 
 			} catch (error: any) {
