@@ -1,6 +1,5 @@
 import {
 	IAuthenticateGeneric,
-	ICredentialTestRequest,
 	ICredentialType,
 	INodeProperties,
 } from 'n8n-workflow';
@@ -42,23 +41,5 @@ export class PlexBasicAuthApi implements ICredentialType {
 				password: '={{$credentials.password}}',
 			},
 		},
-	};
-
-	test: ICredentialTestRequest = {
-		request: {
-			baseURL: 'https://cloud.plex.com',
-			url: '/api/health',
-			method: 'GET',
-		},
-		rules: [
-			{
-				type: 'responseSuccessBody',
-				properties: {
-					message: 'Plex API credentials are valid',
-					key: 'status',
-					value: 'ok',
-				},
-			},
-		],
 	};
 }
