@@ -340,11 +340,8 @@ export class PlexDataSource implements INodeType {
 				const requestBody = await prepareRequestBody(this, bodyInputMethod, itemIndex);
 
 
-				// Log the request URL and Basic Auth username (never log the password)
-				console.log('[PlexDataSource] Request URL:', url);
-				console.log('[PlexDataSource] Basic Auth username:', credentials.username);
 
-				// Construct Basic Auth header manually
+				// Build request config (keep current logic, but add maxBodyLength)
 				const basicAuth = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
 				const requestConfig: AxiosRequestConfig = {
 					method: 'POST',
@@ -357,13 +354,29 @@ export class PlexDataSource implements INodeType {
 					},
 					timeout: advancedSettings.timeout || 30000,
 					maxRedirects: advancedSettings.followRedirects !== false ? 5 : 0,
+					maxBodyLength: Infinity,
+				};
+
+				// Add visible logging for n8n output
+				const logInfo = {
+					request: {
+						url,
+						username: credentials.username,
+						headers: {
+							'Content-Type': 'application/json',
+							'Accept': 'application/json',
+							'Authorization': '[REDACTED]'
+						},
+						body: requestBody
+					}
 				};
 
 				// Execute request with retry logic
 				const response = await executeRequest(requestConfig, advancedSettings);
 
-				// Process response
+				// Process response and include log info
 				const responseData = processResponse(response, url);
+				responseData.json.__plexRequestLog = logInfo;
 				returnData.push(responseData);
 
 			} catch (error: any) {
